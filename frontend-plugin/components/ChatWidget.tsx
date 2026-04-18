@@ -1,6 +1,21 @@
-import React, { useState, useEffect, useRef } from 'react'
-import { MessageCircle, X, Send, User, Bot } from 'lucide-react'
+import React, { useState, useEffect, useRef, useCallback } from 'react'
+import { 
+  MessageCircle, 
+  X, 
+  Send, 
+  User, 
+  Bot, 
+  Phone,
+  Check,
+  AlertCircle,
+  Loader2,
+  Headphones,
+  FlaskConical
+} from 'lucide-react'
 
+// ============================================
+// Types
+// ============================================
 interface Message {
   role: 'user' | 'assistant'
   content: string
@@ -20,14 +35,31 @@ interface ChatWidgetProps {
   primaryColor?: string
   secondaryColor?: string
   position?: 'bottom-right' | 'bottom-left'
+  companyName?: string
+  botName?: string
 }
 
+// ============================================
+// SVG Icons Components
+// ============================================
+const LogoIcon = () => (
+  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
+  </svg>
+)
+
+// ============================================
+// Component
+// ============================================
 const ChatWidget: React.FC<ChatWidgetProps> = ({
   apiUrl,
   primaryColor = '#E30613',
   secondaryColor = '#003087',
-  position = 'bottom-right'
+  position = 'bottom-right',
+  companyName = 'Hitech Steel Industries',
+  botName = 'Hitech Assistant'
 }) => {
+  // State
   const [isOpen, setIsOpen] = useState(false)
   const [currentScreen, setCurrentScreen] = useState<'form' | 'chat'>('form')
   const [isTyping, setIsTyping] = useState(false)
@@ -38,40 +70,74 @@ const ChatWidget: React.FC<ChatWidgetProps> = ({
     email: '',
     phone: '',
     company: '',
-    inquiryType: 'General'
+    inquiryType: ''
   })
   const [formErrors, setFormErrors] = useState<Partial<LeadForm>>({})
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [inputValue, setInputValue] = useState('')
+  const [isEscalated, setIsEscalated] = useState(false)
+  
   const messagesEndRef = useRef<HTMLDivElement>(null)
-  const inputRef = useRef<HTMLInputElement>(null)
+  const inputRef = useRef<HTMLTextAreaElement>(null)
+  const containerRef = useRef<HTMLDivElement>(null)
 
-  const scrollToBottom = () => {
+  // ============================================
+  // Helpers
+  // ============================================
+  const scrollToBottom = useCallback(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }
+  }, [])
 
   useEffect(() => {
     scrollToBottom()
-  }, [messages])
+  }, [messages, scrollToBottom])
 
+  // Focus input when chat opens
+  useEffect(() => {
+    if (isOpen && currentScreen === 'chat' && !isTyping) {
+      setTimeout(() => inputRef.current?.focus(), 100)
+    }
+  }, [isOpen, currentScreen, isTyping])
+
+  // Close on escape key
+  useEffect(() => {
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && isOpen) {
+        setIsOpen(false)
+      }
+    }
+    document.addEventListener('keydown', handleEscape)
+    return () => document.removeEventListener('keydown', handleEscape)
+  }, [isOpen])
+
+  // ============================================
+  // Validation
+  // ============================================
   const validateForm = (): boolean => {
     const errors: Partial<LeadForm> = {}
 
     if (!formData.fullName.trim() || formData.fullName.length < 2) {
-      errors.fullName = 'Full name required (min 2 characters)'
+      errors.fullName = 'Full name is required (min 2 characters)'
     }
 
-    if (!formData.email.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
-      errors.email = 'Valid email address required'
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+    if (!formData.email.trim() || !emailRegex.test(formData.email)) {
+      errors.email = 'Please enter a valid email address'
     }
 
-    if (!formData.phone.trim() || !/^\d{7,15}$/.test(formData.phone.replace(/[\s\-().+]/g, ''))) {
-      errors.phone = 'Valid phone number required'
+    // Phone validation - flexible for international
+    const phoneCleaned = formData.phone.replace(/[\s\-().+]/g, '')
+    if (!formData.phone.trim() || phoneCleaned.length < 7 || phoneCleaned.length > 15) {
+      errors.phone = 'Please enter a valid phone number'
     }
 
     setFormErrors(errors)
     return Object.keys(errors).length === 0
   }
 
+  // ============================================
+  // API Calls
+  // ============================================
   const submitForm = async () => {
     if (!validateForm()) return
 
@@ -93,22 +159,23 @@ const ChatWidget: React.FC<ChatWidgetProps> = ({
       setCurrentScreen('chat')
 
       // Add welcome message
-      setMessages([{
+      const welcomeMessage: Message = {
         role: 'assistant',
-        content: `Hi ${formData.fullName}! 👋 I'm the Hitech Steel AI Assistant. I'm here to help you with product information, pricing, technical support, and more. How can I assist you today?`,
+        content: `Hello! I'm your AI assistant. I can help you with information about our steel products, services, and answer any questions you may have. How can I assist you today?`,
         timestamp: new Date()
-      }])
+      }
+      setMessages([welcomeMessage])
 
-    } catch (error) {
+    } catch (error: any) {
       console.error('Form submission error:', error)
-      alert('Failed to start chat. Please try again.')
+      setFormErrors({ fullName: error.message || 'Failed to start chat. Please try again.' })
     } finally {
       setIsSubmitting(false)
     }
   }
 
   const sendMessage = async (content: string) => {
-    if (!content.trim() || !sessionId) return
+    if (!content.trim() || !sessionId || isTyping) return
 
     const userMessage: Message = {
       role: 'user',
@@ -117,6 +184,7 @@ const ChatWidget: React.FC<ChatWidgetProps> = ({
     }
 
     setMessages(prev => [...prev, userMessage])
+    setInputValue('')
     setIsTyping(true)
 
     try {
@@ -126,13 +194,17 @@ const ChatWidget: React.FC<ChatWidgetProps> = ({
         body: JSON.stringify({ sessionId, message: content.trim() })
       })
 
-      if (!response.ok) throw new Error('Failed to send message')
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}))
+        throw new Error(errorData.error || 'Failed to send message')
+      }
 
       const reader = response.body?.getReader()
       if (!reader) throw new Error('No response stream')
 
       const decoder = new TextDecoder()
       let fullResponse = ''
+      let assistantMessageAdded = false
 
       while (true) {
         const { done, value } = await reader.read()
@@ -147,17 +219,20 @@ const ChatWidget: React.FC<ChatWidgetProps> = ({
               const data = JSON.parse(line.slice(6))
               if (data.chunk) {
                 fullResponse += data.chunk
+                
                 setMessages(prev => {
-                  const newMessages = [...prev]
-                  const lastMessage = newMessages[newMessages.length - 1]
-                  if (lastMessage?.role === 'assistant' && !lastMessage.content.includes('data: ')) {
-                    lastMessage.content = fullResponse
-                  } else {
-                    newMessages.push({
+                  if (!assistantMessageAdded) {
+                    assistantMessageAdded = true
+                    return [...prev, {
                       role: 'assistant',
                       content: fullResponse,
                       timestamp: new Date()
-                    })
+                    }]
+                  }
+                  const newMessages = [...prev]
+                  const lastMessage = newMessages[newMessages.length - 1]
+                  if (lastMessage?.role === 'assistant') {
+                    lastMessage.content = fullResponse
                   }
                   return newMessages
                 })
@@ -169,11 +244,11 @@ const ChatWidget: React.FC<ChatWidgetProps> = ({
         }
       }
 
-    } catch (error) {
+    } catch (error: any) {
       console.error('Message send error:', error)
       setMessages(prev => [...prev, {
         role: 'assistant',
-        content: 'Sorry, I encountered an error. Please try again.',
+        content: 'I apologize, but I encountered an error. Please try again or click "Talk to Human" for assistance.',
         timestamp: new Date()
       }])
     } finally {
@@ -181,38 +256,29 @@ const ChatWidget: React.FC<ChatWidgetProps> = ({
     }
   }
 
-  const handleKeyPress = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault()
-      const input = inputRef.current
-      if (input?.value.trim()) {
-        sendMessage(input.value)
-        input.value = ''
-      }
-    }
-  }
-
   const escalateToHuman = async () => {
-    if (!sessionId) return
+    if (!sessionId || isEscalated) return
 
-    const confirmed = confirm('Would you like to speak with a human representative? We\'ll forward your conversation to our team.')
-
+    const confirmed = window.confirm('Would you like to speak with a human representative? We\'ll forward your conversation to our team.')
     if (!confirmed) return
 
     try {
-      await fetch(`${apiUrl}/api/talk-to-human`, {
+      const response = await fetch(`${apiUrl}/api/talk-to-human`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sessionId, notes: 'Customer requested human agent from widget' })
+        body: JSON.stringify({ 
+          sessionId, 
+          notes: `Customer requested human agent. Inquiry type: ${formData.inquiryType || 'General'}` 
+        })
       })
 
-      // Provide WhatsApp link
-      const whatsappMessage = encodeURIComponent(`Hi, I was chatting with your AI assistant and need to speak with a human. My details: ${formData.fullName}, ${formData.email}, ${formData.phone}`)
-      const whatsappUrl = `https://wa.me/966123456789?text=${whatsappMessage}` // Replace with actual WhatsApp number
+      if (!response.ok) throw new Error('Failed to escalate')
 
+      setIsEscalated(true)
+      
       setMessages(prev => [...prev, {
         role: 'assistant',
-        content: `✅ Your request has been forwarded to our team. A representative will contact you shortly.\n\nAlternatively, you can contact us directly via WhatsApp: [Click here to WhatsApp us](${whatsappUrl})`,
+        content: `Your request has been forwarded to our team. A representative will contact you shortly at ${formData.phone} or ${formData.email}.\n\nThank you for your patience!`,
         timestamp: new Date()
       }])
 
@@ -220,230 +286,415 @@ const ChatWidget: React.FC<ChatWidgetProps> = ({
       console.error('Escalation error:', error)
       setMessages(prev => [...prev, {
         role: 'assistant',
-        content: 'Could not connect right now. Please contact us directly via WhatsApp or call us.',
+        content: 'Could not connect right now. Please contact us directly via phone or email.',
         timestamp: new Date()
       }])
     }
   }
 
-  const renderMessageContent = (content: string) => {
-    // Simple link parsing: [text](url)
-    const linkRegex = /\[([^\]]+)\]\(([^)]+)\)/g
-    const parts = []
-    let lastIndex = 0
-    let match
-
-    while ((match = linkRegex.exec(content)) !== null) {
-      // Add text before link
-      if (match.index > lastIndex) {
-        parts.push(content.slice(lastIndex, match.index))
+  // ============================================
+  // Event Handlers
+  // ============================================
+  const handleKeyPress = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault()
+      if (inputValue.trim() && !isTyping) {
+        sendMessage(inputValue)
       }
-      // Add link
-      parts.push(
-        <a
-          key={match.index}
-          href={match[2]}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="underline hover:no-underline"
-        >
-          {match[1]}
-        </a>
-      )
-      lastIndex = match.index + match[0].length
     }
-
-    // Add remaining text
-    if (lastIndex < content.length) {
-      parts.push(content.slice(lastIndex))
-    }
-
-    return parts.length > 0 ? parts : content
   }
 
-  const positionClasses = position === 'bottom-left'
-    ? 'left-6 right-auto'
-    : 'right-6 left-auto'
+  const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    setInputValue(e.target.value)
+    // Auto-resize
+    e.target.style.height = 'auto'
+    e.target.style.height = Math.min(e.target.scrollHeight, 120) + 'px'
+  }
 
+  // ============================================
+  // Render Helpers
+  // ============================================
+  const formatTime = (date: Date) => {
+    return date.toLocaleTimeString('en-US', { 
+      hour: 'numeric', 
+      minute: '2-digit',
+      hour12: true 
+    })
+  }
+
+  const renderMessageContent = (content: string) => {
+    // Convert URLs to links
+    const urlRegex = /(https?:\/\/[^\s]+)/g
+    const parts = content.split(urlRegex)
+    
+    return parts.map((part, i) => {
+      if (part.match(urlRegex)) {
+        return (
+          <a 
+            key={i}
+            href={part}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="underline hover:opacity-80"
+            style={{ color: 'inherit' }}
+          >
+            {part}
+          </a>
+        )
+      }
+      return <span key={i}>{part}</span>
+    })
+  }
+
+  // ============================================
+  // Position Classes
+  // ============================================
+  const buttonPositionClasses = position === 'bottom-left'
+    ? 'left-6'
+    : 'right-6'
+
+  // ============================================
+  // Render
+  // ============================================
   return (
     <>
-      {/* Widget Button */}
+      {/* Floating Chat Button */}
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className={`fixed bottom-6 ${positionClasses} z-50 w-14 h-14 rounded-full shadow-lg hover:scale-110 transition-transform flex items-center justify-center text-white`}
-        style={{ backgroundColor: primaryColor }}
+        className={`fixed bottom-6 ${buttonPositionClasses} z-[999999] w-14 h-14 rounded-full 
+          transition-all duration-300 ease-out flex items-center justify-center text-white
+          hover:scale-105 active:scale-95 shadow-lg`}
+        style={{ 
+          background: `linear-gradient(135deg, ${primaryColor} 0%, #C00510 100%)`,
+          boxShadow: '0 10px 15px -3px rgba(227, 6, 19, 0.3)'
+        }}
+        aria-label={isOpen ? 'Close chat' : 'Open chat'}
       >
-        {isOpen ? <X size={24} /> : <MessageCircle size={24} />}
+        {isOpen ? (
+          <X size={24} />
+        ) : (
+          <MessageCircle size={24} />
+        )}
+        
+        {/* Pulse animation ring */}
+        {!isOpen && (
+          <span 
+            className="absolute inset-[-4px] rounded-full opacity-40 -z-10 animate-[pulse-ring_2s_ease-in-out_infinite]"
+            style={{ background: primaryColor }}
+          />
+        )}
       </button>
 
-      {/* Chat Panel */}
+      {/* Chat Container */}
       {isOpen && (
-        <div className={`fixed bottom-20 ${positionClasses} z-40 w-96 h-[600px] bg-white rounded-2xl shadow-2xl flex flex-col overflow-hidden`}>
+        <div 
+          ref={containerRef}
+          className={`fixed bottom-24 ${buttonPositionClasses} z-[999998] 
+            w-[380px] h-[600px] max-h-[calc(100vh-140px)]
+            bg-white rounded-3xl overflow-hidden shadow-2xl
+            transition-all duration-300 ease-out animate-[slideUp_0.3s_ease]
+            flex flex-col`}
+        >
           {/* Header */}
-          <div
-            className="p-4 text-white rounded-t-2xl flex items-center justify-between"
-            style={{ background: `linear-gradient(135deg, ${primaryColor}, ${secondaryColor})` }}
+          <div 
+            className="p-4 flex items-center gap-3 flex-shrink-0"
+            style={{ 
+              background: `linear-gradient(135deg, ${primaryColor} 0%, #C00510 100%)` 
+            }}
           >
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center">
-                🏭
-              </div>
-              <div>
-                <h3 className="font-semibold">Hitech Steel Assistant</h3>
-                <p className="text-sm opacity-90">Online — Usually replies instantly</p>
+            {/* Avatar */}
+            <div className="w-11 h-11 bg-white rounded-full flex items-center justify-center flex-shrink-0">
+              <div className="w-6 h-6" style={{ color: primaryColor }}>
+                <LogoIcon />
               </div>
             </div>
+            
+            {/* Info */}
+            <div className="flex-1 min-w-0">
+              <h3 className="font-semibold text-white text-base truncate">{botName}</h3>
+              <div className="flex items-center gap-1.5 text-white/80 text-xs">
+                <span className="w-2 h-2 bg-green-400 rounded-full animate-pulse" />
+                <span>AI-powered support</span>
+              </div>
+            </div>
+            
+            {/* Close Button */}
+            <button 
+              onClick={() => setIsOpen(false)}
+              className="w-9 h-9 bg-white/10 hover:bg-white/20 rounded-lg flex items-center justify-center
+                transition-all duration-200 flex-shrink-0"
+              aria-label="Close chat"
+            >
+              <X size={20} className="text-white" />
+            </button>
           </div>
 
-          {/* Content */}
-          <div className="flex-1 flex flex-col">
+          {/* Content Area */}
+          <div className="flex-1 flex flex-col overflow-hidden" style={{ background: '#F8F9FA' }}>
             {currentScreen === 'form' ? (
-              /* Form Screen */
-              <div className="flex-1 p-6 overflow-y-auto">
-                <div className="text-center mb-6">
-                  <p className="text-gray-600">
-                    Welcome to Hitech Steel Industries! Please share your details to start a conversation.
+              /* Lead Form Screen */
+              <div className="flex-1 overflow-y-auto p-6">
+                {/* Form Container */}
+                <div className="bg-white rounded-2xl p-6 shadow-sm">
+                  {/* Form Header */}
+                  <div className="text-center mb-6">
+                    <h2 className="text-xl font-bold text-gray-900 mb-2">Get Started</h2>
+                    <p className="text-gray-500 text-sm">
+                      Please provide your details so we can assist you better.
+                    </p>
+                  </div>
+
+                  {/* Form Fields */}
+                  <div className="space-y-4">
+                    {/* Full Name */}
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-1.5">
+                        Full Name <span style={{ color: primaryColor }}>*</span>
+                    </label>
+                      <input
+                        type="text"
+                        value={formData.fullName}
+                        onChange={(e) => {
+                          setFormData(prev => ({ ...prev, fullName: e.target.value }))
+                          if (formErrors.fullName) setFormErrors(prev => ({ ...prev, fullName: undefined }))
+                        }}
+                        className="w-full px-4 py-3 bg-white border-2 rounded-xl text-sm transition-all duration-200
+                          focus:outline-none"
+                        style={{
+                          borderColor: formErrors.fullName ? '#EA4335' : '#E8EAED',
+                        }}
+                        onFocus={(e) => e.target.style.borderColor = primaryColor}
+                        onBlur={(e) => e.target.style.borderColor = formErrors.fullName ? '#EA4335' : '#E8EAED'}
+                        placeholder="Enter your full name"
+                      />
+                      {formErrors.fullName && (
+                        <p className="flex items-center gap-1 mt-1.5 text-xs text-red-500">
+                          <AlertCircle size={12} />
+                          {formErrors.fullName}
+                        </p>
+                      )}
+                    </div>
+
+                    {/* Email */}
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-1.5">
+                        Email Address <span style={{ color: primaryColor }}>*</span>
+                      </label>
+                      <input
+                        type="email"
+                        value={formData.email}
+                        onChange={(e) => {
+                          setFormData(prev => ({ ...prev, email: e.target.value }))
+                          if (formErrors.email) setFormErrors(prev => ({ ...prev, email: undefined }))
+                        }}
+                        className="w-full px-4 py-3 bg-white border-2 rounded-xl text-sm transition-all duration-200
+                          focus:outline-none"
+                        style={{
+                          borderColor: formErrors.email ? '#EA4335' : '#E8EAED',
+                        }}
+                        onFocus={(e) => e.target.style.borderColor = primaryColor}
+                        onBlur={(e) => e.target.style.borderColor = formErrors.email ? '#EA4335' : '#E8EAED'}
+                        placeholder="your@email.com"
+                      />
+                      {formErrors.email && (
+                        <p className="flex items-center gap-1 mt-1.5 text-xs text-red-500">
+                          <AlertCircle size={12} />
+                          {formErrors.email}
+                        </p>
+                      )}
+                    </div>
+
+                    {/* Phone */}
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-1.5">
+                        Phone Number <span style={{ color: primaryColor }}>*</span>
+                      </label>
+                      <input
+                        type="tel"
+                        value={formData.phone}
+                        onChange={(e) => {
+                          setFormData(prev => ({ ...prev, phone: e.target.value }))
+                          if (formErrors.phone) setFormErrors(prev => ({ ...prev, phone: undefined }))
+                        }}
+                        className="w-full px-4 py-3 bg-white border-2 rounded-xl text-sm transition-all duration-200
+                          focus:outline-none"
+                        style={{
+                          borderColor: formErrors.phone ? '#EA4335' : '#E8EAED',
+                        }}
+                        onFocus={(e) => e.target.style.borderColor = primaryColor}
+                        onBlur={(e) => e.target.style.borderColor = formErrors.phone ? '#EA4335' : '#E8EAED'}
+                        placeholder="+966 5xxxxxxxx"
+                      />
+                      {formErrors.phone && (
+                        <p className="flex items-center gap-1 mt-1.5 text-xs text-red-500">
+                          <AlertCircle size={12} />
+                          {formErrors.phone}
+                        </p>
+                      )}
+                    </div>
+
+                    {/* Company */}
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-1.5">
+                        Company (Optional)
+                      </label>
+                      <input
+                        type="text"
+                        value={formData.company}
+                        onChange={(e) => setFormData(prev => ({ ...prev, company: e.target.value }))}
+                        className="w-full px-4 py-3 bg-white border-2 border-gray-200 rounded-xl text-sm 
+                          transition-all duration-200 focus:outline-none"
+                        style={{ borderColor: '#E8EAED' }}
+                        onFocus={(e) => e.target.style.borderColor = primaryColor}
+                        onBlur={(e) => e.target.style.borderColor = '#E8EAED'}
+                        placeholder="Your company name"
+                      />
+                    </div>
+
+                    {/* Inquiry Type */}
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-1.5">
+                        Inquiry Type
+                      </label>
+                      <select
+                        value={formData.inquiryType}
+                        onChange={(e) => setFormData(prev => ({ ...prev, inquiryType: e.target.value }))}
+                        className="w-full px-4 py-3 bg-white border-2 border-gray-200 rounded-xl text-sm 
+                          transition-all duration-200 focus:outline-none appearance-none cursor-pointer"
+                        style={{ 
+                          borderColor: '#E8EAED',
+                          backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%236B7280'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E")`,
+                          backgroundRepeat: 'no-repeat',
+                          backgroundPosition: 'right 12px center',
+                          backgroundSize: '20px',
+                          paddingRight: '40px'
+                        }}
+                        onFocus={(e) => e.target.style.borderColor = primaryColor}
+                        onBlur={(e) => e.target.style.borderColor = '#E8EAED'}
+                      >
+                        <option value="">Select inquiry type</option>
+                        <option value="Product Information">Product Information</option>
+                        <option value="Pricing Quote">Pricing Quote</option>
+                        <option value="Technical Support">Technical Support</option>
+                        <option value="Partnership">Partnership</option>
+                        <option value="Careers">Careers</option>
+                        <option value="Other">Other</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* Submit Button */}
+                  <button
+                    onClick={submitForm}
+                    disabled={isSubmitting}
+                    className="w-full mt-6 py-3.5 px-6 rounded-xl text-white font-semibold text-sm
+                      transition-all duration-200 flex items-center justify-center gap-2
+                      disabled:opacity-70 disabled:cursor-not-allowed"
+                    style={{ 
+                      background: `linear-gradient(135deg, ${primaryColor} 0%, #C00510 100%)`,
+                      boxShadow: `0 4px 14px ${primaryColor}40`
+                    }}
+                  >
+                    {isSubmitting ? (
+                      <>
+                        <Loader2 size={18} className="animate-spin" />
+                        <span>Starting Conversation...</span>
+                      </>
+                    ) : (
+                      <>
+                        <span>Start Conversation</span>
+                      </>
+                    )}
+                  </button>
+
+                  <p className="text-center text-xs text-gray-400 mt-4 leading-relaxed">
+                    By submitting, you agree to our privacy policy. Your information is secure and will only be used to assist with your inquiry.
                   </p>
                 </div>
-
-                <div className="space-y-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Full Name <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      type="text"
-                      value={formData.fullName}
-                      onChange={(e) => setFormData(prev => ({ ...prev, fullName: e.target.value }))}
-                      className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500 ${formErrors.fullName ? 'border-red-500' : 'border-gray-300'}`}
-                      placeholder="Enter your full name"
-                      required
-                    />
-                    {formErrors.fullName && (
-                      <p className="text-red-500 text-sm mt-1">{formErrors.fullName}</p>
-                    )}
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Email Address <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      type="email"
-                      value={formData.email}
-                      onChange={(e) => setFormData(prev => ({ ...prev, email: e.target.value }))}
-                      className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500 ${formErrors.email ? 'border-red-500' : 'border-gray-300'}`}
-                      placeholder="your@email.com"
-                      required
-                    />
-                    {formErrors.email && (
-                      <p className="text-red-500 text-sm mt-1">{formErrors.email}</p>
-                    )}
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Phone Number <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      type="tel"
-                      value={formData.phone}
-                      onChange={(e) => setFormData(prev => ({ ...prev, phone: e.target.value }))}
-                      className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500 ${formErrors.phone ? 'border-red-500' : 'border-gray-300'}`}
-                      placeholder="+966 5xxxxxxxx"
-                      required
-                    />
-                    {formErrors.phone && (
-                      <p className="text-red-500 text-sm mt-1">{formErrors.phone}</p>
-                    )}
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Company (Optional)
-                    </label>
-                    <input
-                      type="text"
-                      value={formData.company}
-                      onChange={(e) => setFormData(prev => ({ ...prev, company: e.target.value }))}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
-                      placeholder="Your company name"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Inquiry Type
-                    </label>
-                    <select
-                      value={formData.inquiryType}
-                      onChange={(e) => setFormData(prev => ({ ...prev, inquiryType: e.target.value }))}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
-                    >
-                      <option value="">Select inquiry type</option>
-                      <option value="Product Information">Product Information</option>
-                      <option value="Pricing Quote">Pricing Quote</option>
-                      <option value="Technical Support">Technical Support</option>
-                      <option value="Partnership">Partnership</option>
-                      <option value="Careers">Careers</option>
-                      <option value="Other">Other</option>
-                    </select>
-                  </div>
-                </div>
-
-                <button
-                  onClick={submitForm}
-                  disabled={isSubmitting}
-                  className="w-full mt-6 py-3 rounded-lg text-white font-semibold disabled:opacity-50 disabled:cursor-not-allowed hover:opacity-90 transition-opacity flex items-center justify-center gap-2"
-                  style={{ backgroundColor: primaryColor }}
-                >
-                  {isSubmitting && <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>}
-                  <span>{isSubmitting ? 'Starting Conversation...' : 'Start Conversation'}</span>
-                </button>
-
-                <p className="text-center text-sm text-gray-500 mt-4">
-                  By submitting, you agree to our privacy policy. Your information is secure and will only be used to assist with your inquiry.
-                </p>
               </div>
             ) : (
               /* Chat Screen */
               <>
-                <div className="flex-1 p-4 overflow-y-auto space-y-4">
-                  {messages.map((message, index) => (
-                    <div key={index} className={`flex gap-3 ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                {/* Messages */}
+                <div className="flex-1 overflow-y-auto p-5 space-y-4">
+                  {/* Welcome Message */}
+                  <div 
+                    className="bg-white rounded-2xl p-4 shadow-sm"
+                    style={{ borderLeft: `4px solid ${primaryColor}` }}
+                  >
+                    <h3 className="text-sm font-semibold text-gray-900 mb-2">Welcome to {companyName}!</h3>
+                    <p className="text-sm text-gray-600 leading-relaxed">
+                      Hello! I'm your AI assistant. I can help you with information about our steel products, services, and answer any questions you may have. How can I assist you today?
+                    </p>
+                  </div>
+
+                  {messages.slice(1).map((message, index) => (
+                    <div 
+                      key={index} 
+                      className={`flex gap-2.5 max-w-[85%] ${message.role === 'user' ? 'ml-auto' : ''} animate-[fadeIn_0.3s_ease]`}
+                    >
                       {message.role === 'assistant' && (
-                        <div className="w-8 h-8 bg-primary-100 rounded-full flex items-center justify-center flex-shrink-0">
-                          <Bot size={16} className="text-primary-600" />
+                        <div 
+                          className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0"
+                          style={{ background: `linear-gradient(135deg, ${primaryColor} 0%, #C00510 100%)` }}
+                        >
+                          <Bot size={16} className="text-white" />
                         </div>
                       )}
-                      <div className={`max-w-[80%] px-4 py-2 rounded-2xl ${
-                        message.role === 'user'
-                          ? 'bg-primary-500 text-white'
-                          : 'bg-gray-100 text-gray-800'
-                      }`}>
-                        <p className="text-sm whitespace-pre-wrap">{renderMessageContent(message.content)}</p>
-                        <p className="text-xs opacity-70 mt-1">
-                          {message.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                        </p>
+                      
+                      <div className={`${message.role === 'user' ? 'items-end' : 'items-start'}`}>
+                        <div 
+                          className={`px-4 py-3 rounded-2xl text-sm leading-relaxed ${
+                            message.role === 'user'
+                              ? 'bg-white text-gray-800 shadow-sm'
+                              : 'text-white'
+                          }`}
+                          style={message.role === 'assistant' 
+                            ? { 
+                                background: `linear-gradient(135deg, ${primaryColor} 0%, #C00510 100%)`,
+                                borderBottomLeftRadius: '4px'
+                              }
+                            : { borderBottomRightRadius: '4px' }
+                          }
+                        >
+                          {renderMessageContent(message.content)}
+                        </div>
+                        <span className={`text-xs mt-1 block ${message.role === 'user' ? 'text-right text-gray-400' : 'text-gray-400'}`}>
+                          {formatTime(message.timestamp)}
+                        </span>
                       </div>
+
                       {message.role === 'user' && (
-                        <div className="w-8 h-8 bg-primary-500 rounded-full flex items-center justify-center flex-shrink-0">
+                        <div 
+                          className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0"
+                          style={{ background: secondaryColor }}
+                        >
                           <User size={16} className="text-white" />
                         </div>
                       )}
                     </div>
                   ))}
 
+                  {/* Typing Indicator */}
                   {isTyping && (
-                    <div className="flex gap-3 justify-start">
-                      <div className="w-8 h-8 bg-primary-100 rounded-full flex items-center justify-center">
-                        <Bot size={16} className="text-primary-600" />
+                    <div className="flex gap-2.5">
+                      <div 
+                        className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0"
+                        style={{ background: `linear-gradient(135deg, ${primaryColor} 0%, #C00510 100%)` }}
+                      >
+                        <Bot size={16} className="text-white" />
                       </div>
-                      <div className="bg-gray-100 px-4 py-2 rounded-2xl">
+                      <div 
+                        className="px-4 py-3 rounded-2xl text-white text-sm"
+                        style={{ 
+                          background: `linear-gradient(135deg, ${primaryColor} 0%, #C00510 100%)`,
+                          borderBottomLeftRadius: '4px'
+                        }}
+                      >
                         <div className="flex gap-1">
-                          <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></div>
-                          <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
-                          <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
+                          <span className="w-2 h-2 bg-white/70 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                          <span className="w-2 h-2 bg-white/70 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                          <span className="w-2 h-2 bg-white/70 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
                         </div>
                       </div>
                     </div>
@@ -452,35 +703,62 @@ const ChatWidget: React.FC<ChatWidgetProps> = ({
                   <div ref={messagesEndRef} />
                 </div>
 
-                <div className="p-4 border-t border-gray-200">
-                  <button
-                    onClick={escalateToHuman}
-                    className="w-full mb-3 py-2 px-4 rounded-lg border-2 text-sm font-medium hover:bg-gray-50 transition-colors"
-                    style={{ borderColor: secondaryColor, color: secondaryColor }}
-                  >
-                    👤 Talk to a Human
-                  </button>
+                {/* Talk to Human Button */}
+                {!isEscalated && (
+                  <div className="px-5 py-3 bg-gray-50 border-t border-gray-200 flex justify-center">
+                    <button
+                      onClick={escalateToHuman}
+                      className="flex items-center gap-2 px-5 py-2.5 text-sm font-semibold
+                        bg-white border-2 rounded-lg transition-all duration-200
+                        hover:text-white"
+                      style={{ 
+                        borderColor: secondaryColor, 
+                        color: secondaryColor
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.background = secondaryColor
+                        e.currentTarget.style.color = 'white'
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.background = 'white'
+                        e.currentTarget.style.color = secondaryColor
+                      }}
+                    >
+                      <Phone size={16} />
+                      <span>Talk to Human</span>
+                    </button>
+                  </div>
+                )}
 
-                  <div className="flex gap-2">
-                    <input
+                {/* Input Area */}
+                <div className="p-4 bg-white border-t border-gray-200">
+                  <div className="flex gap-3 items-end">
+                    <textarea
                       ref={inputRef}
-                      type="text"
-                      placeholder="Type your message..."
+                      value={inputValue}
+                      onChange={handleInputChange}
                       onKeyPress={handleKeyPress}
-                      className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                      disabled={isTyping}
+                      placeholder={isEscalated ? 'Conversation ended - A representative will contact you' : 'Type your message...'}
+                      disabled={isTyping || isEscalated}
+                      rows={1}
+                      className="flex-1 min-h-[44px] max-h-[120px] px-4 py-3 bg-gray-50 border-2 border-gray-200 
+                        rounded-xl text-sm resize-none transition-all duration-200
+                        focus:outline-none focus:bg-white disabled:bg-gray-100 disabled:cursor-not-allowed"
+                      style={{ 
+                        borderColor: '#E8EAED',
+                      }}
+                      onFocus={(e) => e.target.style.borderColor = primaryColor}
+                      onBlur={(e) => e.target.style.borderColor = '#E8EAED'}
                     />
                     <button
-                      onClick={() => {
-                        const input = inputRef.current
-                        if (input?.value.trim()) {
-                          sendMessage(input.value)
-                          input.value = ''
-                        }
+                      onClick={() => inputValue.trim() && sendMessage(inputValue)}
+                      disabled={!inputValue.trim() || isTyping || isEscalated}
+                      className="w-11 h-11 rounded-xl flex items-center justify-center text-white
+                        transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed
+                        hover:scale-105 active:scale-95 flex-shrink-0"
+                      style={{ 
+                        background: `linear-gradient(135deg, ${primaryColor} 0%, #C00510 100%)` 
                       }}
-                      disabled={isTyping}
-                      className="px-4 py-2 rounded-lg text-white disabled:opacity-50 disabled:cursor-not-allowed hover:opacity-90 transition-opacity"
-                      style={{ backgroundColor: primaryColor }}
                     >
                       <Send size={18} />
                     </button>
@@ -491,6 +769,7 @@ const ChatWidget: React.FC<ChatWidgetProps> = ({
           </div>
         </div>
       )}
+
     </>
   )
 }
