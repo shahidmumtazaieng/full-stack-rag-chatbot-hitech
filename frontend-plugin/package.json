@@ -9,6 +9,7 @@
     "start": "next start",
     "export": "next export",
     "build:widget": "webpack --mode production",
+    "serve": "node serve.js",
     "lint": "next lint"
   },
   "dependencies": {
