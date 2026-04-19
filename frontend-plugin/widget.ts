@@ -18,7 +18,7 @@
   const CONFIG = {
     apiUrl: (function () {
       const s = document.currentScript;
-      return (s && s.getAttribute('data-api-url')) || (window as any).HITECH_CHAT_API_URL || 'http://localhost:3000';
+      return (s && s.getAttribute('data-api-url')) || (window as any).HITECH_CHAT_API_URL || 'https://hitechsa.netlify.app/';
     })(),
     primaryColor:   '#E30613',
     secondaryColor: '#003087',
