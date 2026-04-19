@@ -23,9 +23,9 @@ module.exports = {
   resolve: {
     extensions: ['.tsx', '.ts', '.js'],
   },
-  output: {
-    filename: 'widget.js',
-    path: path.resolve(__dirname, 'dist'),
+output: {
+  filename: 'widget.js',
+  path: path.resolve(__dirname, 'dist'),
     library: 'HitechChatWidget',
     libraryTarget: 'umd',
     globalObject: 'this',
