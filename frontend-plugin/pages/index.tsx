@@ -38,7 +38,7 @@ const Home: NextPage = () => {
           </div>
 
           <div className="text-sm text-gray-500">
-            <p>Backend API: <code className="bg-gray-100 px-2 py-1 rounded">http://localhost:3000</code></p>
+            <p>Backend API: <code className="bg-gray-100 px-2 py-1 rounded">https://hitechsa.netlify.app/</code></p>
             <p>Make sure your Node.js backend is running on port 3000</p>
           </div>
         </div>
@@ -46,7 +46,7 @@ const Home: NextPage = () => {
 
       {/* Widget will appear as floating button */}
       <ChatWidget
-        apiUrl="http://localhost:3000"
+        apiUrl="https://hitechsa.netlify.app/"
         primaryColor="#E30613"
         secondaryColor="#003087"
         position="bottom-right"
